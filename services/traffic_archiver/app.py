@@ -1,9 +1,11 @@
+# Traffic Archiver: consumes Kafka events to simulate long-term storage.
 import json
 import os
 import time
 from kafka import KafkaConsumer
 from kafka.errors import NoBrokersAvailable
 
+# Kafka consumer configuration shared by this archival service.
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TOPIC = os.getenv("RAW_TOPIC", "raw_traffic_data")
 

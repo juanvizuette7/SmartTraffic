@@ -1,3 +1,4 @@
+# Traffic Density Processor: materializes Kafka events and replicas state via RabbitMQ fanout.
 import json
 import os
 import threading
@@ -7,16 +8,19 @@ import pika
 from kafka import KafkaConsumer
 from kafka.errors import NoBrokersAvailable
 
+# Shared connection parameters for Kafka and RabbitMQ.
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TOPIC = os.getenv("RAW_TOPIC", "raw_traffic_data")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 BROADCAST_INTERVAL = max(1, int(os.getenv("BROADCAST_INTERVAL_SECONDS", "5")))
 
+# In-memory KTable representing the current traffic state per zone.
 zone_states = {}
 state_lock = threading.Lock()
 
 
 def classify_density(vehicle_count: int) -> str:
+    """Map the raw vehicle count to the semantic traffic state."""
     if vehicle_count < 20:
         return "DESPEJADA"
     if vehicle_count < 40:

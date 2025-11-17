@@ -4,113 +4,115 @@
   <meta charset="UTF-8" />
   <title>SmartTraffic Monitor</title>
   <style>
-    :root { --bg:#0b1222; --panel:#161f35; --text:#e5edff; --muted:#9aa5c4; --ok:#34d399; --warn:#fbbf24; --alert:#f87171; }
-    *{box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}
-    body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;padding:32px}
-    main{width:min(940px,100%);display:grid;gap:18px}
-    header,section,.card{background:var(--panel);border-radius:16px;padding:20px;border:1px solid rgba(148,163,184,.2)}
-    header{text-align:center}
-    h1{margin:0;font-size:1.85rem}
-    p{margin:6px 0 0;color:var(--muted)}
-    .status{margin-top:12px;display:inline-flex;align-items:center;gap:8px;font-size:.9rem}
-    .dot{width:10px;height:10px;border-radius:50%;background:#6b7280}
-    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-    .label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-    .value{font-size:1.7rem;font-weight:600;margin-top:4px}
-    .zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
-    .zone{display:grid;gap:8px}
-    .badge{width:max-content;padding:5px 12px;border-radius:999px;font-weight:600;font-size:.8rem;color:#0f172a;background:#9aa5c4}
-    .hint{text-align:center;color:var(--muted)}
-    .timestamp{text-align:right;font-size:.85rem;color:var(--muted)}
-    .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-    ul{padding-left:20px;margin:0;color:var(--muted);font-size:.9rem}
-    ul li{margin-bottom:6px}
+    :root {
+      --bg:#050c1f;--panel:#0d172f;--card:#121f3a;--text:#f5f8ff;--muted:#9fb3d9;
+      --lane:#182849;--green:#10b981;--yellow:#fbbf24;--red:#f87171;
+    }
+    *{box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif;}
+    body{margin:0;background:radial-gradient(circle at top,#0f1f44,transparent 60%),var(--bg);color:var(--text);padding:48px;display:flex;justify-content:center;min-height:100vh}
+    main{width:min(1100px,100%);display:grid;gap:24px}
+    header,section{background:var(--panel);border-radius:28px;padding:28px;border:1px solid rgba(147,197,253,.2);box-shadow:0 30px 70px rgba(5,12,31,.8)}
+    header{position:relative;overflow:hidden;color:var(--text)}
+    header::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(56,189,248,.12),transparent 45%);pointer-events:none}
+    .hero-car{position:absolute;top:20px;right:20px;font-size:5rem;opacity:.15;transform:rotate(-10deg)}
+    h1{margin:0;font-size:2.6rem;letter-spacing:.06em}
+    p{margin:8px 0 0;color:var(--muted);font-size:1.05rem}
+    .status{margin-top:16px;display:inline-flex;align-items:center;gap:12px;padding:8px 18px;border-radius:999px;background:rgba(15,23,42,.65);border:1px solid rgba(147,197,253,.35);color:var(--muted)}
+    .dot{width:12px;height:12px;border-radius:50%;background:#fbbf24;box-shadow:0 0 12px rgba(251,191,36,.8)}
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px}
+    .stat{background:var(--card);border-radius:22px;padding:20px;border:1px solid rgba(148,163,184,.25);text-align:center}
+    .stat span{display:block}
+    .label{font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}
+    .value{font-size:2.3rem;font-weight:600}
+    .lanes{background:var(--lane);border-radius:24px;padding:28px;border:1px solid rgba(56,189,248,.2)}
+    .lanes h2{margin:0 0 18px;color:var(--text);font-size:1.4rem}
+    .lanes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
+    .lane{background:var(--card);border-radius:16px;padding:18px;border:1px solid rgba(148,163,184,.2);display:grid;gap:8px}
+    .lane h3{margin:0;font-size:1.15rem}
+    .badge{width:max-content;padding:6px 14px;border-radius:999px;font-size:.78rem;font-weight:600;color:#04101f}
+    .hint{color:var(--muted);font-size:.9rem}
+    .detail{font-size:.78rem;color:var(--text);opacity:.8}
+    .row{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+    .card{background:var(--card);border-radius:20px;padding:20px;border:1px solid rgba(148,163,184,.2);display:grid;gap:12px}
+    .chips{display:flex;flex-wrap:wrap;gap:10px}
+    .chip{padding:6px 14px;border-radius:12px;background:rgba(248,113,113,.15);color:#fecaca;font-size:.85rem}
+    .log{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:.9rem;height:140px;overflow:auto}
+    .flow{display:grid;gap:10px;color:var(--muted);font-size:.95rem}
+    .flow span{display:flex;align-items:center;gap:10px}
+    .timestamp{text-align:right;color:var(--muted);margin:0;font-size:.9rem}
   </style>
 </head>
 <body>
   <main>
     <header>
+      <div class="hero-car">&#128663;</div>
       <h1>SmartTraffic</h1>
-      <p>Estado consolidado de zonas urbanas</p>
+      <p>Kafka registra cada sensor -> RabbitMQ replica el estado -> Dashboard muestra la ciudad en directo.</p>
       <div class="status" id="conn"><span class="dot"></span><span id="conn-text">Conectando...</span></div>
     </header>
+
     <section class="stats">
-      <div class="card"><span class="label">Zonas</span><span class="value" id="stat-total">0</span></div>
-      <div class="card"><span class="label">Despejada</span><span class="value" id="stat-clear">0</span></div>
-      <div class="card"><span class="label">Moderada</span><span class="value" id="stat-moderate">0</span></div>
-      <div class="card"><span class="label">Congestionada</span><span class="value" id="stat-congested">0</span></div>
+      <div class="stat"><span class="label">Zonas</span><span class="value" id="stat-total">0</span></div>
+      <div class="stat"><span class="label">Despejada</span><span class="value" id="stat-clear">0</span></div>
+      <div class="stat"><span class="label">Moderada</span><span class="value" id="stat-moderate">0</span></div>
+      <div class="stat"><span class="label">Congestionada</span><span class="value" id="stat-congested">0</span></div>
     </section>
-    <section class="card" style="display:grid;gap:10px">
-      <strong>Alertas activas</strong>
-      <span id="alert-text" style="color:var(--muted)">Sin alertas, ciudad estable.</span>
-    </section>
-    <div class="timestamp" id="last">Esperando datos...</div>
-    <section class="zones" id="zones">
-      <div class="card hint">Sin eventos de Kafka por ahora.</div>
-    </section>
-    <section class="card" style="display:grid;gap:10px">
-      <strong>Actividades recientes</strong>
-      <div id="history" style="display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:.9rem">
-        <span>Monitoreando cambios en tiempo real...</span>
+
+    <section class="lanes">
+      <h2>Mapa por carril</h2>
+      <div class="lanes-grid" id="zones">
+        <div class="lane" style="text-align:center;color:var(--muted)">Aun no hay datos desde Kafka.</div>
       </div>
     </section>
+
+    <div class="row">
+      <section class="card">
+        <strong>Alertas proactivas</strong>
+        <div class="chips" id="alert-list"><span style="color:var(--muted)">Sin zonas criticas.</span></div>
+      </section>
+      <section class="card">
+        <strong>Consulta asincronica (A-B-C)</strong>
+        <span id="route-text" style="color:var(--muted)">Esperando respuesta...</span>
+      </section>
+    </div>
+
+    <div class="row">
+      <section class="card">
+        <strong>KTable en accion</strong>
+        <div class="log" id="history"><span>Sin cambios registrados.</span></div>
+      </section>
+      <section class="card">
+        <strong>Flujo hibrido</strong>
+        <div class="flow">
+          <span>Sensores publican en Kafka (topic raw_traffic_data).</span>
+          <span>traffic_density_processor replica el estado en fanout traffic_updates.</span>
+          <span>query_client consulta en query_traffic_queue y recibe respuesta en query_answers.</span>
+        </div>
+        <p class="timestamp" id="last">Esperando datos...</p>
+      </section>
+    </div>
   </main>
+
   <script>
-    const conn=document.getElementById('conn'),connText=document.getElementById('conn-text'),last=document.getElementById('last'),zones=document.getElementById('zones'),alertText=document.getElementById('alert-text'),historyList=document.getElementById('history');
+    const conn=document.getElementById('conn'),connText=document.getElementById('conn-text');
+    const last=document.getElementById('last');
+    const zonesEl=document.getElementById('zones');
+    const alertList=document.getElementById('alert-list');
+    const historyEl=document.getElementById('history');
+    const routeText=document.getElementById('route-text');
     const stats={total:document.getElementById('stat-total'),DESPEJADA:document.getElementById('stat-clear'),MODERADA:document.getElementById('stat-moderate'),CONGESTIONADA:document.getElementById('stat-congested')};
-    const colors={DESPEJADA:'var(--ok)',MODERADA:'var(--warn)',CONGESTIONADA:'var(--alert)'};
-    const history=[];
-    const previousState=new Map();
+    const colors={DESPEJADA:'var(--green)',MODERADA:'var(--yellow)',CONGESTIONADA:'var(--red)'};
+    const details={DESPEJADA:'Semaforo verde, flujo fluido.',MODERADA:'Semaforo amarillo, monitorear.',CONGESTIONADA:'Semaforo rojo, activar desvio.'};
+    const sampleRoute=['Zone A','Zone B','Zone C'];
+    const history=[];const previous=new Map();
+
     function setConn(text,color){conn.querySelector('.dot').style.background=color;connText.textContent=text;}
-    function render(data){
-      zones.innerHTML='';
-      const entries=Object.entries(data);
-      if(!entries.length){
-        zones.innerHTML='<div class="card hint">Aun no hay datos.</div>';
-        updateStats({total:0,DESPEJADA:0,MODERADA:0,CONGESTIONADA:0});
-        updateAlerts([]);
-        return;
-      }
-      const counts={total:entries.length,DESPEJADA:0,MODERADA:0,CONGESTIONADA:0};
-      const congested=[];
-      entries.sort(([a],[b])=>a.localeCompare(b)).forEach(([zone,state])=>{
-        if(counts[state]!=null)counts[state]+=1;
-        if(state==="CONGESTIONADA")congested.push(zone);
-        const prev=previousState.get(zone);
-        if(prev && prev!==state){
-          history.unshift(`${new Date().toLocaleTimeString()} - ${zone}: ${prev} -> ${state}`);
-          if(history.length>4)history.pop();
-        }
-        previousState.set(zone,state);
-        const card=document.createElement('div');
-        card.className='card zone';
-        card.innerHTML=`<strong>${zone}</strong><span class="badge" style="background:${colors[state]||'var(--muted)'}">${state||'DESCONOCIDO'}</span>`;
-        zones.appendChild(card);
-      });
-      updateStats(counts);
-      updateAlerts(congested);
-    }
-    function updateStats(c){stats.total.textContent=c.total;stats.DESPEJADA.textContent=c.DESPEJADA;stats.MODERADA.textContent=c.MODERADA;stats.CONGESTIONADA.textContent=c.CONGESTIONADA;}
-    function updateAlerts(congested){alertText.textContent=congested.length?`Zonas criticas: ${congested.join(", ")}. Evaluar desvios.`:"Sin alertas, ciudad estable.";}
-    function updateHistory(){
-      historyList.innerHTML=history.length?history.map(item=>`<span>${item}</span>`).join(""):"<span>Sin variaciones registradas.</span>";
-    }
-    (function connect(){
-      setConn('Conectando...','#6b7280');
-      const ws=new WebSocket('ws://localhost:8000/ws');
-      ws.onopen=()=>setConn('Conectado','var(--ok)');
-      ws.onmessage=evt=>{
-        try{
-          render(JSON.parse(evt.data));
-          last.textContent='Ultima actualizacion: '+new Date().toLocaleTimeString();
-        }catch(err){console.error(err);}
-      };
-      ws.onclose=()=>{
-        setConn('Reconectando...','var(--warn)');
-        setTimeout(connect,2000);
-      };
-      ws.onerror=()=>ws.close();
-    })();
+    function updateStats(counts){stats.total.textContent=counts.total;stats.DESPEJADA.textContent=counts.DESPEJADA;stats.MODERADA.textContent=counts.MODERADA;stats.CONGESTIONADA.textContent=counts.CONGESTIONADA;}
+    function updateAlerts(congested){alertList.innerHTML='';if(!congested.length){alertList.innerHTML='<span style="color:var(--muted)">Sin zonas criticas.</span>';return;}congested.forEach(zone=>{const chip=document.createElement('span');chip.className='chip';chip.textContent=`${zone} en ROJO`;alertList.appendChild(chip);});}
+    function updateRoute(snapshot){const summary=sampleRoute.map(z=>`${z}: ${snapshot[z]||'DESCONOCIDO'}`).join(' | ');routeText.textContent=`Ultima respuesta asincronica -> ${summary}`;}
+    function updateHistory(){historyEl.innerHTML=history.length?history.map(item=>`<span>${item}</span>`).join(''):'<span>Sin cambios registrados.</span>';}
+function render(snapshot){zonesEl.innerHTML='';const entries=Object.entries(snapshot);if(!entries.length){zonesEl.innerHTML='<div class="lane" style="text-align:center;color:var(--muted)">Aun no hay datos desde Kafka.</div>';updateStats({total:0,DESPEJADA:0,MODERADA:0,CONGESTIONADA:0});updateAlerts([]);updateRoute({});return;}const counts={total:entries.length,DESPEJADA:0,MODERADA:0,CONGESTIONADA:0};const congested=[];entries.sort(([a],[b])=>a.localeCompare(b)).forEach(([zone,state])=>{if(counts[state]!=null)counts[state]+=1;if(state==='CONGESTIONADA')congested.push(zone);const prev=previous.get(zone);if(prev && prev!==state){history.unshift(`${new Date().toLocaleTimeString()} - ${zone}: ${prev} -> ${state}`);if(history.length>5)history.pop();updateHistory();}previous.set(zone,state);const card=document.createElement('div');card.className='lane';card.innerHTML=`<h3>${zone}</h3>`;const badge=document.createElement('span');badge.className='badge';badge.style.background=colors[state]||'var(--muted)';badge.textContent=state||'DESCONOCIDO';const hint=document.createElement('span');hint.className='hint';hint.textContent=state==='DESPEJADA'?'Flujo ligero':'MODERADA'===state?'Actividad estable':'Congestion detectada';const detail=document.createElement('span');detail.className='detail';detail.textContent=details[state]||'Sin detalle';card.appendChild(badge);card.appendChild(hint);card.appendChild(detail);zonesEl.appendChild(card);});updateStats(counts);updateAlerts(congested);updateRoute(snapshot);}
+    (function connect(){setConn('Conectando...','#fbbf24');const ws=new WebSocket('ws://localhost:8000/ws');ws.onopen=()=>setConn('Conectado al backend','var(--green)');ws.onmessage=evt=>{try{const snapshot=JSON.parse(evt.data);render(snapshot);last.textContent='Ultima actualizacion: '+new Date().toLocaleTimeString();}catch(err){console.error('Payload invalido',err);}};ws.onclose=()=>{setConn('Reconectando...','#fbbf24');setTimeout(connect,2000);};ws.onerror=()=>ws.close();})();
   </script>
 </body>
 </html>

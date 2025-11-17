@@ -1,3 +1,4 @@
+# Alert Dispatcher: replicates state via fanout and answers queries via work queue + topic.
 import json
 import os
 import threading
@@ -5,10 +6,12 @@ import time
 
 import pika
 
+# RabbitMQ connection details and queue/exchange names for the messaging patterns.
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUERY_QUEUE = "query_traffic_queue"
 ANSWER_EXCHANGE = "query_answers"
 
+# Local replica of the zone map used to serve user queries.
 zone_states: dict[str, str] = {}
 state_lock = threading.Lock()
 

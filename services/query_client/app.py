@@ -1,3 +1,4 @@
+# Query Client: publishes route questions and listens for topic responses.
 import json
 import os
 import random
@@ -6,6 +7,7 @@ import time
 
 import pika
 
+# RabbitMQ endpoints and client-specific parameters.
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUERY_QUEUE = "query_traffic_queue"
 ANSWER_EXCHANGE = "query_answers"

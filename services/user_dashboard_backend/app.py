@@ -1,3 +1,4 @@
+# User Dashboard Backend: consumes RabbitMQ fanout and streams updates via WebSocket.
 import asyncio
 import contextlib
 import json
@@ -6,10 +7,12 @@ import os
 import aio_pika
 import websockets
 
+# RabbitMQ endpoint and WebSocket binding configuration.
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 WS_HOST = os.getenv("WS_HOST", "0.0.0.0")
 WS_PORT = int(os.getenv("WS_PORT", "8000"))
 
+# Active WebSocket clients and cached snapshot of the city state.
 connected_clients: set[websockets.WebSocketServerProtocol] = set()
 latest_state: dict[str, str] = {}
 

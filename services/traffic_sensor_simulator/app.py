@@ -1,3 +1,4 @@
+# Traffic Sensor Simulator: publishes random traffic events to Kafka.
 import json
 import os
 import random
@@ -6,6 +7,7 @@ from kafka import KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import NoBrokersAvailable, TopicAlreadyExistsError
 
+# Kafka connection parameters shared across the simulator.
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TOPIC = os.getenv("RAW_TOPIC", "raw_traffic_data")
 ZONE_IDS = [z.strip() for z in os.getenv("ZONE_IDS", "Zone A,Zone B,Zone C").split(",") if z.strip()]
@@ -49,6 +51,7 @@ def build_producer():
 
 
 def main():
+    """Generate random events forever to feed the stateful processor."""
     ensure_topic()
     producer = build_producer()
     while True:
