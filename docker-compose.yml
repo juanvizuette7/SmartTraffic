@@ -1,80 +1,89 @@
-version: "3.9"
-
+# Full distributed stack: Kafka (ingestion), RabbitMQ (distribution), Python microservices.
 services:
+
+  # Zookeeper → required for Kafka coordination
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_CLIENT_PORT: 2181   # Kafka connects here
+      ZOOKEEPER_TICK_TIME: 2000     # Internal timing heartbeat
     ports:
       - "2181:2181"
 
+  # Kafka → stores raw traffic events (system of record)
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_BROKER_ID: 1                              # Unique broker ID
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181         # Kafka requires Zookeeper
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092  # Address advertised to clients
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092           # Internal listener
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1           # Single-broker mode
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
     depends_on:
-      - zookeeper
+      - zookeeper        # Start only after Zookeeper is ready
     ports:
-      - "9092:9092"
+      - "9092:9092"      # Kafka public port
 
+  # RabbitMQ → routes messages (fanout, work queue, topic replies)
   rabbitmq:
     image: rabbitmq:3-management
     environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}        # User loaded from .env
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}    # Password loaded from .env
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"     # Messaging port
+      - "15672:15672"   # Web management UI
 
+  # Sensor → Kafka producer (generates random traffic events)
   traffic_sensor_simulator:
     build: ./services/traffic_sensor_simulator
-    env_file: .env
+    env_file: .env                 # Load host/port configs
     depends_on:
-      - kafka
-    restart: always
+      - kafka                      # Needs Kafka to publish data
+    restart: always                # Auto-restart if it crashes
 
+  # Processor → Kafka consumer + RabbitMQ publisher (stateful brain)
   traffic_density_processor:
     build: ./services/traffic_density_processor
-    env_file: .env
+    env_file: .env                 # Variable Conection
     depends_on:
-      - kafka
-      - rabbitmq
+      - kafka                      # Reads events from Kafka
+      - rabbitmq                   # Publishes snapshots to RabbitMQ
     restart: always
 
+  # Archiver → Kafka consumer (simulated storage)
   traffic_archiver:
     build: ./services/traffic_archiver
     env_file: .env
     depends_on:
-      - kafka
+      - kafka                      # Consumes raw events
     restart: always
 
+  # Dashboard backend → RabbitMQ consumer + WebSocket server
   user_dashboard_backend:
     build: ./services/user_dashboard_backend
     env_file: .env
     depends_on:
-      - rabbitmq
+      - rabbitmq                   # Receives fanout updates
     ports:
-      - "8000:8000"
+      - "8000:8000"                # WebSocket port
     restart: always
 
+  # Dispatcher → holds replicated state + answers user queries
   alert_dispatcher:
     build: ./services/alert_dispatcher
     env_file: .env
     depends_on:
-      - rabbitmq
+      - rabbitmq                   # Uses fanout + work queue + topic exchange
     restart: always
 
+  # Query client → sends questions and receives topic-based replies
   query_client:
     build: ./services/query_client
     env_file: .env
     depends_on:
-      - rabbitmq
+      - rabbitmq                   # Needs queues/exchanges available
     restart: always

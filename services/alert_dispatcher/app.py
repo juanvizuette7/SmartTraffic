@@ -1,4 +1,4 @@
-# Alert Dispatcher: replicates state via fanout and answers queries via work queue + topic.
+# Alert Dispatcher: replicates state and answers user queries
 import json
 import os
 import threading
@@ -6,103 +6,141 @@ import time
 
 import pika
 
-# RabbitMQ connection details and queue/exchange names for the messaging patterns.
+# RABBITMQ_URL → connection URL for RabbitMQ
+# QUERY_QUEUE → queue where clients send their queries
+# ANSWER_EXCHANGE → topic exchange used to send directed replies
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 QUERY_QUEUE = "query_traffic_queue"
 ANSWER_EXCHANGE = "query_answers"
 
-# Local replica of the zone map used to serve user queries.
+# zone_states → local copy of the traffic state, used to answer queries
+# state_lock → lock to prevent simultaneous modification from multiple threads
 zone_states: dict[str, str] = {}
 state_lock = threading.Lock()
 
 
 def listen_for_updates():
-    """Replicate the latest traffic snapshot from the RabbitMQ fanout exchange."""
+    """Listen to the fanout exchange and replicate global state."""
     while True:
         try:
+            # Connect to RabbitMQ
             params = pika.URLParameters(RABBITMQ_URL)
             connection = pika.BlockingConnection(params)
             channel = connection.channel()
+
+            # Declare the fanout exchange where the global state is published
             channel.exchange_declare(exchange="traffic_updates", exchange_type="fanout", durable=True)
+
+            # Create an exclusive queue for this microservice
             queue = channel.queue_declare(queue="", exclusive=True)
             queue_name = queue.method.queue
-            channel.queue_bind(queue=queue_name, exchange="traffic_updates")
-            print("Alert dispatcher replicando estado desde fanout")
 
+            # Bind exclusive queue to the fanout exchange
+            channel.queue_bind(queue=queue_name, exchange="traffic_updates")
+            print("Alert dispatcher replicating state from fanout")
+
+            # Callback that updates the local state replica
             def callback(ch, method, properties, body):
                 data = json.loads(body.decode("utf-8"))
                 with state_lock:
                     zone_states.clear()
                     zone_states.update(data)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
-                print(f"Estado replicado: {zone_states}")
+                print(f"State replicated: {zone_states}")
 
             channel.basic_consume(queue=queue_name, on_message_callback=callback)
             channel.start_consuming()
+
         except pika.exceptions.AMQPConnectionError:
-            print("RabbitMQ (fanout) no disponible, reintentando...")
+            print("RabbitMQ (fanout) unavailable, retrying...")
             time.sleep(3)
         except Exception as exc:
-            print(f"Error en la replicacion de estado: {exc}")
+            print(f"Error in state replication: {exc}")
             time.sleep(3)
 
 
 def listen_for_queries():
-    """Consume user queries from the work queue and answer them using the local replica."""
+    """Listen for user queries from the work queue and respond using the local replica."""
     while True:
         try:
+            # Connect to RabbitMQ
             params = pika.URLParameters(RABBITMQ_URL)
             connection = pika.BlockingConnection(params)
             channel = connection.channel()
-            channel.queue_declare(queue=QUERY_QUEUE, durable=True)
-            channel.exchange_declare(exchange=ANSWER_EXCHANGE, exchange_type="topic", durable=True)
-            channel.basic_qos(prefetch_count=1)
-            print("Alert dispatcher escuchando consultas de usuarios")
 
+            # Queue where client queries arrive
+            channel.queue_declare(queue=QUERY_QUEUE, durable=True)
+
+            # Topic exchange for sending directed responses
+            channel.exchange_declare(exchange=ANSWER_EXCHANGE, exchange_type="topic", durable=True)
+
+            # Process one query at a time
+            channel.basic_qos(prefetch_count=1)
+            print("Alert dispatcher listening for user queries")
+
+            # Callback to process each query
             def on_request(ch, method, properties, body):
                 try:
                     request = json.loads(body.decode("utf-8"))
-                    user_id = request.get("user_id", "anonimo")
+                    user_id = request.get("user_id", "anonymous")
                     trayecto = request.get("trayecto", [])
+
+                    # Look up requested zones using the local replica
                     with state_lock:
-                        snapshot = {zona: zone_states.get(zona, "DESCONOCIDO") for zona in trayecto}
+                        snapshot = {zona: zone_states.get(zona, "UNKNOWN") for zona in trayecto}
+
+                    # Build response
                     response = {
                         "user_id": user_id,
                         "trayecto": trayecto,
                         "estado": snapshot,
-                        "mensaje": "Respuesta generada por alert_dispatcher",
+                        "mensaje": "Response generated by alert_dispatcher",
                     }
+
+                    # routing_key → ensures the response goes ONLY to the correct client
                     routing_key = f"answer.{user_id}"
+
+                    # Publish the response to RabbitMQ (topic exchange)
+                    # Uses routing_key to deliver the message ONLY to the correct client.
                     channel.basic_publish(
                         exchange=ANSWER_EXCHANGE,
                         routing_key=routing_key,
-                        body=json.dumps(response).encode("utf-8"),
+                        body=json.dumps(response).encode("utf-8"),  # JSON response
                     )
-                    print(f"Respuesta enviada ({routing_key}): {snapshot}")
+
+                    # Console confirmation of the sent response
+                    print(f"Response sent ({routing_key}): {snapshot}")
+
                 except Exception as exc:
-                    print(f"Error procesando consulta: {exc}")
+                    # Error processing the user's query
+                    print(f"Error processing query: {exc}")
                 finally:
+                    # Tell RabbitMQ the message has been handled
                     ch.basic_ack(delivery_tag=method.delivery_tag)
 
+            # Register consumer for the work queue
             channel.basic_consume(queue=QUERY_QUEUE, on_message_callback=on_request)
             channel.start_consuming()
+
         except pika.exceptions.AMQPConnectionError:
-            print("RabbitMQ (work queue) no disponible, reintentando...")
+            # RabbitMQ temporarily unavailable
+            print("RabbitMQ (work queue) unavailable, retrying...")
             time.sleep(3)
         except Exception as exc:
-            print(f"Error escuchando consultas: {exc}")
+            # General error
+            print(f"Error listening for queries: {exc}")
             time.sleep(3)
 
 
 def main():
-    """Start RabbitMQ consumers: one for replication and one for the work queue."""
-    threading.Thread(target=listen_for_updates, daemon=True).start()
-    listen_for_queries()
+    """Start both listeners: fanout (state) and work queue (queries)."""
+    threading.Thread(target=listen_for_updates, daemon=True).start()  # Thread to replicate state
+    listen_for_queries()  # Main listener for queries
 
 
 if __name__ == "__main__":
     try:
-        # Run the dispatcher responsible for proactive alerts and query replies.
+        # Run the dispatcher that replicates state and answers queries
         main()
     except KeyboardInterrupt:
-        print("Alert dispatcher detenido")
+        print("Alert dispatcher stopped")
